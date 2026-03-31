@@ -1,0 +1,91 @@
+name: S3 DevSecOps Pipeline
+
+on:
+  push:
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Install Terraform
+      - name: Install Terraform
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip
+          wget https://releases.hashicorp.com/terraform/1.6.6/terraform_1.6.6_linux_amd64.zip
+          unzip terraform_1.6.6_linux_amd64.zip
+          sudo mv terraform /usr/local/bin/
+
+      # Install Checkov
+      - name: Install Checkov
+        run: pip install checkov
+
+      # Install Gitleaks
+      - name: Install Gitleaks
+        run: |
+          wget https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_linux_x64.tar.gz
+          tar -xzf gitleaks_linux_x64.tar.gz
+          sudo mv gitleaks /usr/local/bin/
+
+      # Run security scans
+      - name: Run Checkov
+        run: checkov -d terraform
+
+      - name: Run Gitleaks
+        run: gitleaks detect
+
+      # Configure AWS
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      # Terraform
+      - name: Terraform Init
+        run: |
+          cd terraform
+          terraform init
+
+      - name: Terraform Apply
+        run: |
+          cd terraform
+          terraform apply -auto-approve
+
+      # Dynamic Auto-Remediation (CSPM Style)
+      - name: Detect and Fix Public S3 Buckets
+        run: |
+          echo "Scanning all S3 buckets..."
+
+          BUCKETS=$(aws s3api list-buckets --query "Buckets[].Name" --output text)
+
+          for BUCKET in $BUCKETS; do
+            echo "Checking bucket: $BUCKET"
+
+            BLOCK=$(aws s3api get-public-access-block \
+              --bucket $BUCKET \
+              --query "PublicAccessBlockConfiguration.BlockPublicAcls" \
+              --output text 2>/dev/null || echo "false")
+
+            if [ "$BLOCK" != "True" ]; then
+              echo "Public access issue found in $BUCKET — fixing..."
+
+              aws s3api put-public-access-block \
+                --bucket $BUCKET \
+                --public-access-block-configuration \
+                BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+
+              echo "Fixed: $BUCKET"
+            else
+              echo "Already secure: $BUCKET"
+            fi
+
+            echo "-----------------------------"
+          done
+
+          echo "Scan completed at $(date)"

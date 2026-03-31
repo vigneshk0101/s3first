@@ -1,0 +1,8 @@
+.env
+.terraform/
+*.tfstate.*
+*.tfstate
+*.tfstate.backup
+*.pem
+*.log
+test.txt
