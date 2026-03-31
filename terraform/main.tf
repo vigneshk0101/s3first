@@ -2,13 +2,20 @@ provider "aws" {
   region = "us-east-1"
 }
 
-resource "aws_s3_bucket" "test" {
-  bucket = "my-insecure-bucket-demo-12345"
+resource "aws_s3_bucket" "secure_bucket" {
+  bucket = "my-secure-s3-bucket-demo-12345"
+
+  tags = {
+    Name        = "SecureBucket"
+    Environment = "Dev"
+  }
 }
 
-resource "aws_s3_bucket_public_access_block" "test" {
-  bucket = aws_s3_bucket.test.id
+resource "aws_s3_bucket_public_access_block" "block_public" {
+  bucket = aws_s3_bucket.secure_bucket.id
 
-  block_public_acls   = false
-  block_public_policy = false
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }

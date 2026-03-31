@@ -1,12 +1,14 @@
 #!/bin/bash
 
-BUCKET_NAME=$1
+echo "Fixing S3 public access..."
 
-echo "Fixing public access for $BUCKET_NAME"
+BUCKETS=$(aws s3api list-buckets --query "Buckets[].Name" --output text)
 
-aws s3api put-public-access-block \
-  --bucket $BUCKET_NAME \
-  --public-access-block-configuration \
-  BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+for BUCKET in $BUCKETS; do
+  aws s3api put-public-access-block \
+    --bucket $BUCKET \
+    --public-access-block-configuration \
+    BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 
-echo "Remediation completed"
+  echo "Secured: $BUCKET"
+done
