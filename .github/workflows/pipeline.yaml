@@ -7,7 +7,14 @@ jobs:
   security:
     runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        shell: bash
+
     steps:
+      # ---------------------------
+      # 📥 Checkout Code
+      # ---------------------------
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -16,48 +23,62 @@ jobs:
       # ---------------------------
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
+        with:
+          projectBaseDir: .
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
 
-      # Install Terraform
-      - name: Install Terraform
+      # ---------------------------
+      # ⚙️ Install Dependencies
+      # ---------------------------
+      - name: Install Terraform + Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y wget unzip python3-pip
+
+          # Terraform
           wget https://releases.hashicorp.com/terraform/1.6.6/terraform_1.6.6_linux_amd64.zip
           unzip terraform_1.6.6_linux_amd64.zip
           sudo mv terraform /usr/local/bin/
 
-      # Install Checkov (IaC Security)
-      - name: Install Checkov
-        run: pip install checkov
+          # Trivy
+          wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.50.2_Linux-64bit.deb
+          sudo dpkg -i trivy_0.50.2_Linux-64bit.deb
 
-      # Install Gitleaks (Secrets)
+      - name: Install Checkov
+        run: pip install checkov==3.2.0
+
       - name: Install Gitleaks
         run: |
-          wget https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_linux_x64.tar.gz
-          tar -xzf gitleaks_linux_x64.tar.gz
+          wget https://github.com/gitleaks/gitleaks/releases/download/v8.18.1/gitleaks_8.18.1_linux_x64.tar.gz
+          tar -xzf gitleaks_8.18.1_linux_x64.tar.gz
           sudo mv gitleaks /usr/local/bin/
 
       # ---------------------------
-      # 📦 SCA (Dependency + Config Scan)
+      # 📦 SCA (Trivy Scan)
       # ---------------------------
-      - name: Run Trivy Scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: fs
-          scan-ref: .
+      - name: Run Trivy Scan (JSON Report)
+        run: |
+          trivy fs . --format json --output trivy-report.json
 
       # ---------------------------
-      # 🔍 Security Scans
+      # 🔍 IaC Security (Checkov)
       # ---------------------------
-      - name: Run Checkov
-        run: checkov -d terraform
+      - name: Run Checkov (JSON Report)
+        run: |
+          checkov -d terraform --output json > checkov-report.json
 
+      # ---------------------------
+      # 🔑 Secrets Scan (Gitleaks)
+      # ---------------------------
       - name: Run Gitleaks
-        run: gitleaks detect --source .
+        run: |
+          gitleaks detect --source . --report-format sarif --report-path gitleaks-report.sarif
 
-      # Configure AWS
+      # ---------------------------
+      # ☁️ Configure AWS
+      # ---------------------------
       - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -65,56 +86,49 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      # Terraform
+      # ---------------------------
+      # 🏗️ Terraform Deployment
+      # ---------------------------
       - name: Terraform Init
-        run: |
-          cd terraform
-          terraform init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Terraform Validate
+        working-directory: terraform
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: terraform
+        run: terraform plan
 
       - name: Terraform Apply
-        run: |
-          cd terraform
-          terraform apply -auto-approve
+        working-directory: terraform
+        run: terraform apply -auto-approve
 
       # ---------------------------
-      # 🌐 DAST (ZAP Scan)
+      # 🔄 Auto-Remediation
       # ---------------------------
-      - name: Run OWASP ZAP Baseline Scan
-        uses: zaproxy/action-baseline@v0.10.0
+      - name: Run S3 Auto-Remediation
+        run: |
+          chmod +x scripts/remediate.sh
+          ./scripts/remediate.sh
+
+      # ---------------------------
+      # 📤 Upload Reports (GitHub)
+      # ---------------------------
+      - name: Upload Gitleaks Report
+        uses: actions/upload-artifact@v4
         with:
-          target: "http://example.com"  # ⚠️ replace with your app URL
+          name: gitleaks-report
+          path: gitleaks-report.sarif
 
       # ---------------------------
-      # 🔄 Auto-Remediation (CSPM)
+      # 📤 Upload Reports to S3
       # ---------------------------
-      - name: Detect and Fix Public S3 Buckets
+      - name: Upload Reports to S3
         run: |
-          echo "Scanning all S3 buckets..."
+          TIMESTAMP=$(date +%Y-%m-%d-%H-%M-%S)
 
-          BUCKETS=$(aws s3api list-buckets --query "Buckets[].Name" --output text)
-
-          for BUCKET in $BUCKETS; do
-            echo "Checking bucket: $BUCKET"
-
-            BLOCK=$(aws s3api get-public-access-block \
-              --bucket $BUCKET \
-              --query "PublicAccessBlockConfiguration.BlockPublicAcls" \
-              --output text 2>/dev/null || echo "false")
-
-            if [ "$BLOCK" != "True" ]; then
-              echo "Public access issue found in $BUCKET — fixing..."
-
-              aws s3api put-public-access-block \
-                --bucket $BUCKET \
-                --public-access-block-configuration \
-                BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
-
-              echo "Fixed: $BUCKET"
-            else
-              echo "Already secure: $BUCKET"
-            fi
-
-            echo "-----------------------------"
-          done
-
-          echo "Scan completed at $(date)"
+          aws s3 cp gitleaks-report.sarif s3://s3first-project-all-files/reports/$TIMESTAMP/
+          aws s3 cp trivy-report.json s3://s3first-project-all-files/reports/$TIMESTAMP/
+          aws s3 cp checkov-report.json s3://s3first-project-all-files/reports/$TIMESTAMP/
