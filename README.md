@@ -22,7 +22,7 @@ This project implements a DevSecOps pipeline to monitor and secure AWS S3 config
 * Terraform
 * GitHub Actions
 * Gitleaks
-* Bash & PowerShell
+* Bash 
 
 ---
 
