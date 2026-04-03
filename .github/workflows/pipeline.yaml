@@ -44,13 +44,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y wget unzip python3-pip
 
+      - name: Install Trivy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget
+
+          wget https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.deb
+          sudo dpkg -i trivy_0.69.3_Linux-64bit.deb
+
       - name: Run Trivy Scan
-        uses: aquasecurity/trivy-action@v0
-        with:
-          scan-type: fs
-          scan-ref: .
-          format: json
-          output: trivy-report.json
+        run: |
+          trivy fs . --format json --output trivy-report.json
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
