@@ -1,4 +1,6 @@
 #!/bin/bash
+ 
+mkdir -p reports 
 
 LOG_FILE="reports/remediation.log"
 LOG_BUCKET="s3first-project-all-files"   
