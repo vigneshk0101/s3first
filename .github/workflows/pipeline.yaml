@@ -15,16 +15,12 @@ jobs:
       run:
         shell: bash
 
+    #CHECKOUT CODE
     steps:
-      # ---------------------------
-      # 📥 Checkout Code
-      # ---------------------------
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ---------------------------
-      # 🔐 SAST (SonarCloud)
-      # ---------------------------
+    #SONAR CLOUD CONFIGURE
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         with:
@@ -36,15 +32,8 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
 
-      # ---------------------------
-      # ⚙️ Install Dependencies
-      # ---------------------------
-      - name: Install python Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y wget unzip python3-pip
-
-      - name: Install Trivy
+    #INSTALLING TOOLS
+      - name: Install Trivy #1
         run: |
           sudo apt-get update
           sudo apt-get install -y wget
@@ -52,45 +41,27 @@ jobs:
           wget https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.deb
           sudo dpkg -i trivy_0.69.3_Linux-64bit.deb
 
-      - name: Run Trivy Scan
+      - name: Install Gitleaks #2
         run: |
-          trivy fs . --format json --output trivy-report.json
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.6.6
-
-      - name: Verify Terraform
-        run: terraform -version
-
-      - name: Install Checkov
-        run: pip install checkov==3.2.0
-
-      - name: Install Gitleaks
-        run: |
-          wget https://github.com/gitleaks/gitleaks/releases/download/v8.18.1/gitleaks_8.18.1_linux_x64.tar.gz
-          tar -xzf gitleaks_8.18.1_linux_x64.tar.gz
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz | tar -xz
           sudo mv gitleaks /usr/local/bin/
 
-      # ---------------------------
-      # 📦 Security Scans
-      # ---------------------------
-      - name: Run Trivy Scan
+    #RUNNING SCANS
+      - name: Export SonarCloud Report #1
+        run: |
+          curl -u "${{ secrets.SONAR_TOKEN }}:" \
+          "https://sonarcloud.io/api/issues/search?componentKeys=vigneshk0101_s3first" \
+          -o sonar-report.json
+          
+      - name: Run Trivy Scan #2
         run: |
           trivy fs . --format json --output trivy-report.json
 
-      - name: Run Checkov
-        run: |
-          checkov -d terraform --output json > checkov-report.json || true
-
-      - name: Run Gitleaks
+      - name: Run Gitleaks #3
         run: |
           gitleaks detect --source . --report-format sarif --report-path gitleaks-report.sarif
 
-      # ---------------------------
-      # ☁️ Configure AWS
-      # ---------------------------
+    #CONFIGURE AWS
       - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -98,45 +69,15 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      # ---------------------------
-      # 🏗️ Terraform Deployment
-      # ---------------------------
-      - name: Terraform Init
-        working-directory: terraform
-        run: terraform init
 
-      - name: Terraform Validate
-        working-directory: terraform
-        run: terraform validate
-
-      - name: Terraform Plan
-        working-directory: terraform
-        run: terraform plan
-
-      - name: Terraform Apply
-        working-directory: terraform
-        run: terraform apply -auto-approve
-
-      # ---------------------------
-      # 🔄 Auto-Remediation
-      # ---------------------------
+    #REMEDIATION SCRIPT RUNNING
       - name: Run S3 Auto-Remediation
         run: |
           chmod +x scripts/remediate.sh
           ./scripts/remediate.sh
 
-      # ---------------------------
-      # 📤 Upload Reports (GitHub)
-      # ---------------------------
-      - name: Upload Gitleaks Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: gitleaks-report
-          path: gitleaks-report.sarif
-
-      # ---------------------------
-      # 📤 Upload Reports to S3 (ALWAYS RUN)
-      # ---------------------------
+    #UPLOAD REPORTS TO S3
+  
       - name: Upload Reports to S3
         if: always()
         run: |
@@ -144,4 +85,4 @@ jobs:
 
           aws s3 cp gitleaks-report.sarif s3://s3first-project-all-files/reports/$TIMESTAMP/ || true
           aws s3 cp trivy-report.json s3://s3first-project-all-files/reports/$TIMESTAMP/ || true
-          aws s3 cp checkov-report.json s3://s3first-project-all-files/reports/$TIMESTAMP/ || true
+          aws s3 cp sonar-report.json s3://s3first-project-all-files/reports/$TIMESTAMP/ || true
