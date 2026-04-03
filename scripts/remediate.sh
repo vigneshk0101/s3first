@@ -42,7 +42,7 @@ done
 echo "-----------------------------------" | tee -a $LOG_FILE
 echo "📤 Uploading logs to S3..." | tee -a $LOG_FILE
 
-aws s3 cp $LOG_FILE s3://$LOG_BUCKET/remediation-$TIMESTAMP.log
+aws s3 cp $LOG_FILE s3://$LOG_BUCKET/reports/remediation-$TIMESTAMP.log
 
 if [ $? -eq 0 ]; then
   echo "✅ Logs uploaded successfully to s3://$LOG_BUCKET/" | tee -a $LOG_FILE
