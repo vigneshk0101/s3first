@@ -35,14 +35,18 @@ jobs:
       # ---------------------------
       # ⚙️ Install Dependencies
       # ---------------------------
-      - name: Install Tools
+      - name: Install python Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y wget unzip python3-pip
 
-          # Install Trivy
-          wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.50.2_Linux-64bit.deb
-          sudo dpkg -i trivy_0.50.2_Linux-64bit.deb
+      - name: Run Trivy Scan
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: json
+          output: trivy-report.json
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
