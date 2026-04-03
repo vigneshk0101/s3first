@@ -26,7 +26,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=vigneshk0101_s3first
-            -Dsonar.organization=vigneshk0101 
+            -Dsonar.organization=vigneshk0101
             -Dsonar.sources=.
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -35,48 +35,43 @@ jobs:
       # ---------------------------
       # ⚙️ Install Dependencies
       # ---------------------------
-      - name: Trivy
+      - name: Install Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y wget unzip python3-pip
 
-          # Trivy
+          # Install Trivy
           wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.50.2_Linux-64bit.deb
           sudo dpkg -i trivy_0.50.2_Linux-64bit.deb
 
       - name: Setup Terraform
-         uses: hashicorp/setup-terraform@v3
-         with:
-            terraform_version: 1.6.6
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
       - name: Verify Terraform
         run: terraform -version
-        
+
       - name: Install Checkov
         run: pip install checkov==3.2.0
 
-      - name: Install Gitleakss
+      - name: Install Gitleaks
         run: |
           wget https://github.com/gitleaks/gitleaks/releases/download/v8.18.1/gitleaks_8.18.1_linux_x64.tar.gz
           tar -xzf gitleaks_8.18.1_linux_x64.tar.gz
           sudo mv gitleaks /usr/local/bin/
 
       # ---------------------------
-      # 📦 SCA (Trivy Scan)
+      # 📦 Security Scans
       # ---------------------------
-      - name: Run Trivy Scan (JSON Report)
+      - name: Run Trivy Scan
         run: |
           trivy fs . --format json --output trivy-report.json
 
-      # ---------------------------
-      # 🔍 IaC Security (Checkov)
-      # ---------------------------
-      - name: Run Checkov (JSON Report)
+      - name: Run Checkov
         run: |
           checkov -d terraform --output json > checkov-report.json
 
-      # ---------------------------
-      # 🔑 Secrets Scan (Gitleaks)
-      # ---------------------------
       - name: Run Gitleaks
         run: |
           gitleaks detect --source . --report-format sarif --report-path gitleaks-report.sarif
@@ -128,12 +123,13 @@ jobs:
           path: gitleaks-report.sarif
 
       # ---------------------------
-      # 📤 Upload Reports to S3
+      # 📤 Upload Reports to S3 (ALWAYS RUN)
       # ---------------------------
       - name: Upload Reports to S3
+        if: always()
         run: |
           TIMESTAMP=$(date +%Y-%m-%d-%H-%M-%S)
 
-          aws s3 cp gitleaks-report.sarif s3://s3first-project-all-files/reports/$TIMESTAMP/
-          aws s3 cp trivy-report.json s3://s3first-project-all-files/reports/$TIMESTAMP/
-          aws s3 cp checkov-report.json s3://s3first-project-all-files/reports/$TIMESTAMP/
+          aws s3 cp gitleaks-report.sarif s3://s3first-project-all-files/reports/$TIMESTAMP/ || true
+          aws s3 cp trivy-report.json s3://s3first-project-all-files/reports/$TIMESTAMP/ || true
+          aws s3 cp checkov-report.json s3://s3first-project-all-files/reports/$TIMESTAMP/ || true
