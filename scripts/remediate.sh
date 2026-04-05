@@ -1,9 +1,9 @@
 #!/bin/bash
- 
-mkdir -p reports 
+
+mkdir -p reports
 
 LOG_FILE="reports/remediation.log"
-LOG_BUCKET="s3first-project-all-files"   
+LOG_BUCKET="s3first-project-all-files"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 
 echo "🔍 S3 Security Scan Started at $(date)" | tee -a $LOG_FILE

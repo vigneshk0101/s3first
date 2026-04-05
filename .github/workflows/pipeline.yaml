@@ -52,7 +52,7 @@ jobs:
           curl -u "${{ secrets.SONAR_TOKEN }}:" \
           "https://sonarcloud.io/api/issues/search?componentKeys=vigneshk0101_s3first" \
           -o sonar-report.json
-          
+
       - name: Run Trivy Scan #2
         run: |
           trivy fs . --format json --output trivy-report.json
@@ -77,7 +77,7 @@ jobs:
           ./scripts/remediate.sh
 
     #UPLOAD REPORTS TO S3
-  
+
       - name: Upload Reports to S3
         if: always()
         run: |
