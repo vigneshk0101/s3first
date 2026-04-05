@@ -1,5 +1,12 @@
 repos:
   # ---------------------------
+  # Security (Secrets Scan)
+  # ---------------------------
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+  # ---------------------------
   # Basic Git Hygiene
   # ---------------------------
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -16,11 +23,3 @@ repos:
     rev: 26.3.1
     hooks:
       - id: black
-
-  # ---------------------------
-  # Security (Secrets Scan)
-  # ---------------------------
-  - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.30.0
-    hooks:
-      - id: gitleaks
